@@ -1,6 +1,22 @@
 # Python cache
 __pycache__/
 *.py[cod]
+*$py.class
 
 # Runtime logs
 logs/*.log
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Termux/editor temporary files
+*.swp
+*.swo
+*~
