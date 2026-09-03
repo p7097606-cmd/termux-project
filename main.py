@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+import subprocess
 
 from modules.system_info import get_system_info
 from modules.network_info import get_network_info
@@ -55,7 +56,7 @@ def show_system_info():
         log("System information berhasil dibaca")
 
     except Exception as error:
-        print(f"\n[ERROR] Gagal membaca informasi sistem: {error}")
+        print(f"[ERROR] Gagal membaca informasi sistem: {error}")
         log(f"ERROR system info: {error}")
 
 
@@ -82,7 +83,7 @@ def show_network_info():
         log("Network information berhasil diperiksa")
 
     except Exception as error:
-        print(f"\n[ERROR] Gagal membaca informasi jaringan: {error}")
+        print(f"[ERROR] Gagal membaca informasi jaringan: {error}")
         log(f"ERROR network info: {error}")
 
 
@@ -122,12 +123,42 @@ def github_update():
     print("          GITHUB UPDATE")
     print("================================")
 
-    print("Untuk mengambil perubahan terbaru dari GitHub:")
-    print()
-    print("    git pull")
-    print()
+    try:
+        print("Memeriksa repository...")
 
-    log("Menu GitHub Update dibuka")
+        result = subprocess.run(
+            ["git", "pull"],
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        if result.stdout:
+            print(result.stdout.strip())
+
+        if result.stderr:
+            print(result.stderr.strip())
+
+        if result.returncode == 0:
+            print("\n[OK] GitHub berhasil diperbarui.")
+            log("GitHub update berhasil")
+        else:
+            print("\n[ERROR] GitHub update gagal.")
+            print(f"Kode keluar: {result.returncode}")
+            log(f"ERROR GitHub update: exit {result.returncode}")
+
+    except subprocess.TimeoutExpired:
+        print("[ERROR] Git pull timeout.")
+        log("ERROR GitHub update: timeout")
+
+    except FileNotFoundError:
+        print("[ERROR] Perintah git tidak ditemukan.")
+        log("ERROR GitHub update: git tidak ditemukan")
+
+    except Exception as error:
+        print(f"[ERROR] {error}")
+        log(f"ERROR GitHub update: {error}")
 
 
 # ========================================
@@ -135,8 +166,7 @@ def github_update():
 # ========================================
 
 def show_menu():
-    print()
-    print("================================")
+    print("\n================================")
     print("         TERMUX PROJECT")
     print("================================")
     print("1. System Information")
@@ -159,10 +189,12 @@ def main():
 
         try:
             choice = input("Pilih menu: ").strip()
+
         except KeyboardInterrupt:
             print("\n")
             log("Program dihentikan oleh pengguna")
             break
+
         except EOFError:
             print("\n")
             log("Input berakhir")
