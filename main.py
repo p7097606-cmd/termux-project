@@ -46,6 +46,7 @@ def write_log(message, show=True):
 def safe_value(value, default="Tidak tersedia"):
     if value is None or value == "":
         return default
+
     return value
 
 
@@ -77,7 +78,6 @@ def show_device_status():
         print(f"CPU cores     : {safe_value(info.get('cpu_count'))}")
         print(f"Hostname      : {safe_value(info.get('hostname'))}")
 
-        # RAM
         ram = info.get("ram") or {}
 
         total_mb = ram.get("total_mb")
@@ -91,7 +91,6 @@ def show_device_status():
         else:
             print("RAM           : Tidak tersedia")
 
-        # STORAGE
         storage = info.get("storage") or {}
 
         total_gb = storage.get("total_gb")
@@ -107,8 +106,7 @@ def show_device_status():
         else:
             print("Storage       : Tidak tersedia")
 
-        # UPTIME
-        uptime = info.get("uptime")
+        uptime = info.get("uptime") or {}
 
         if isinstance(uptime, dict):
             days = uptime.get("days")
@@ -134,25 +132,37 @@ def show_device_status():
         else:
             print("Uptime        : Tidak tersedia")
 
-        # ANDROID
         android = info.get("android") or {}
 
         print()
         print("ANDROID")
         print("--------------------------------")
 
-        version = android.get("ro.build.version.release")
-        sdk = android.get("ro.build.version.sdk")
-        manufacturer = android.get("ro.product.manufacturer")
-        model = android.get("ro.product.model")
+        print(
+            f"Version       : "
+            f"{safe_value(android.get('ro.build.version.release'))}"
+        )
 
-        print(f"Version       : {safe_value(version)}")
-        print(f"SDK           : {safe_value(sdk)}")
-        print(f"Manufacturer  : {safe_value(manufacturer)}")
-        print(f"Model         : {safe_value(model)}")
+        print(
+            f"SDK           : "
+            f"{safe_value(android.get('ro.build.version.sdk'))}"
+        )
+
+        print(
+            f"Manufacturer  : "
+            f"{safe_value(android.get('ro.product.manufacturer'))}"
+        )
+
+        print(
+            f"Model         : "
+            f"{safe_value(android.get('ro.product.model'))}"
+        )
 
         print()
-        print(f"Diperiksa     : {safe_value(info.get('timestamp'))}")
+        print(
+            f"Diperiksa     : "
+            f"{safe_value(info.get('timestamp'))}"
+        )
 
         write_log("Device status berhasil diperiksa")
 
@@ -216,7 +226,10 @@ def show_network_info():
         info = get_network_info()
 
         print(f"Hostname      : {safe_value(info.get('hostname'))}")
-        print(f"Local IP      : {safe_value(info.get('local_ip'), 'Tidak terdeteksi')}")
+        print(
+            f"Local IP      : "
+            f"{safe_value(info.get('local_ip'), 'Tidak terdeteksi')}"
+        )
 
         internet = info.get("internet")
 
@@ -249,11 +262,12 @@ def show_logs():
     try:
         if not LOG_FILE.exists():
             print("Belum ada log.")
+            pause()
             return
 
         content = LOG_FILE.read_text(
             encoding="utf-8",
-            errors="replace"
+            errors="replace",
         ).strip()
 
         if content:
@@ -280,28 +294,36 @@ def github_update():
     print()
 
     try:
-        # Pastikan direktori memang repository Git.
         check = subprocess.run(
-            ["git", "rev-parse", "--is-inside-work-tree"],
+            [
+                "git",
+                "rev-parse",
+                "--is-inside-work-tree",
+            ],
             cwd=BASE_DIR,
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
 
         if check.returncode != 0:
             print("[ERROR] Direktori ini bukan repository Git.")
-            write_log("ERROR GitHub update: bukan repository Git")
+            write_log(
+                "ERROR GitHub update: bukan repository Git"
+            )
             pause()
             return
 
-        # Ambil update dari GitHub.
         result = subprocess.run(
-            ["git", "pull", "--ff-only"],
+            [
+                "git",
+                "pull",
+                "--ff-only",
+            ],
             cwd=BASE_DIR,
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=60,
         )
 
         stdout = result.stdout.strip()
@@ -317,6 +339,7 @@ def github_update():
             print()
             print("[OK] GitHub berhasil diperbarui.")
             write_log("GitHub update berhasil")
+
         else:
             print()
             print("[ERROR] GitHub update gagal.")
@@ -331,21 +354,36 @@ def github_update():
 
     except FileNotFoundError:
         print("[ERROR] Git tidak ditemukan.")
-        print("Pastikan Git sudah terpasang di Termux.")
-        write_log("ERROR GitHub update: git tidak ditemukan")
+        print("Install Git dengan:")
+        print("pkg install git -y")
+
+        write_log(
+            "ERROR GitHub update: git tidak ditemukan"
+        )
 
     except subprocess.TimeoutExpired:
         print("[ERROR] GitHub update timeout.")
-        print("Koneksi atau repository terlalu lama merespons.")
-        write_log("ERROR GitHub update: timeout")
+        print(
+            "Koneksi atau repository terlalu lama merespons."
+        )
+
+        write_log(
+            "ERROR GitHub update: timeout"
+        )
 
     except KeyboardInterrupt:
         print("\n[INFO] GitHub update dibatalkan.")
-        write_log("GitHub update dibatalkan")
+
+        write_log(
+            "GitHub update dibatalkan"
+        )
 
     except Exception as error:
         print(f"[ERROR] GitHub update: {error}")
-        write_log(f"ERROR GitHub update: {error}")
+
+        write_log(
+            f"ERROR GitHub update: {error}"
+        )
 
     pause()
 
@@ -370,10 +408,17 @@ def show_menu():
 
 def get_choice():
     try:
-        return input("Pilih menu: ").strip()
+        value = input("Pilih menu: ")
+
+        if value is None:
+            return "0"
+
+        return value.strip()
+
     except KeyboardInterrupt:
         print("\n")
         return "0"
+
     except EOFError:
         print("\n")
         return "0"
@@ -391,6 +436,12 @@ def main():
 
         choice = get_choice()
 
+        # EXIT HARUS DIPROSES TERLEBIH DAHULU
+        if choice == "0":
+            write_log("Program selesai")
+            print("Sampai jumpa.")
+            return 0
+
         if choice == "1":
             show_device_status()
 
@@ -406,17 +457,14 @@ def main():
         elif choice == "5":
             github_update()
 
-        elif choice == "0":
-            write_log("Program selesai")
-            print("Sampai jumpa.")
-            return 0
-
         elif choice == "":
-            print("\n[ERROR] Pilihan tidak boleh kosong.")
+            print()
+            print("[ERROR] Pilihan tidak boleh kosong.")
             print("Gunakan angka 0 sampai 5.")
 
         else:
-            print("\n[ERROR] Pilihan tidak valid.")
+            print()
+            print("[ERROR] Pilihan tidak valid.")
             print("Gunakan angka 0 sampai 5.")
 
 
@@ -427,9 +475,11 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
+
     except KeyboardInterrupt:
         print("\nProgram dihentikan.")
         sys.exit(0)
+
     except Exception as error:
         print(f"\n[FATAL ERROR] {error}")
         sys.exit(1)

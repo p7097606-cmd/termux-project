@@ -1,17 +1,34 @@
+#!/usr/bin/env python3
+
 import os
 import platform
 import shutil
 
 
 def get_storage_info():
+    """
+    Mendapatkan informasi storage Termux.
+    Menggunakan beberapa path sebagai fallback.
+    """
+
     paths = [
         os.path.expanduser("~"),
         "/data/data/com.termux/files/home",
         "/data/data/com.termux/files/usr",
     ]
 
+    checked = set()
+
     for path in paths:
+        if not path or path in checked:
+            continue
+
+        checked.add(path)
+
         try:
+            if not os.path.exists(path):
+                continue
+
             total, used, free = shutil.disk_usage(path)
 
             return {
@@ -36,9 +53,10 @@ def get_system_info():
     storage = get_storage_info()
 
     return {
-        "platform": platform.system(),
-        "machine": platform.machine(),
-        "python": platform.python_version(),
+        "platform": platform.system() or None,
+        "machine": platform.machine() or None,
+        "python": platform.python_version() or None,
+
         "storage_path": storage.get("path"),
         "disk_total_gb": storage.get("total_gb"),
         "disk_used_gb": storage.get("used_gb"),

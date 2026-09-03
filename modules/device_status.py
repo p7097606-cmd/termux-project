@@ -1,188 +1,276 @@
+#!/usr/bin/env python3
+
 import os
 import platform
-import shutil
+import socket
 import subprocess
-import time
+from datetime import datetime
+
+from modules.system_info import get_storage_info
 
 
-def read_file(path):
+def read_android_property(name):
+    """
+    Membaca property Android menggunakan getprop.
+    """
+
     try:
-        with open(path, "r", encoding="utf-8") as file:
-            return file.read().strip()
-    except (OSError, PermissionError):
-        return None
-
-
-def get_ram_info():
-    data = read_file("/proc/meminfo")
-
-    if not data:
-        return {
-            "total_mb": None,
-            "available_mb": None,
-            "used_mb": None,
-        }
-
-    values = {}
-
-    for line in data.splitlines():
-        parts = line.split()
-
-        if len(parts) >= 2 and parts[0].endswith(":"):
-            try:
-                values[parts[0][:-1]] = int(parts[1])
-            except ValueError:
-                continue
-
-    total = values.get("MemTotal")
-    available = values.get("MemAvailable")
-
-    if total is None:
-        return {
-            "total_mb": None,
-            "available_mb": None,
-            "used_mb": None,
-        }
-
-    if available is None:
-        available = values.get("MemFree", 0)
-
-    used = max(total - available, 0)
-
-    return {
-        "total_mb": round(total / 1024, 2),
-        "available_mb": round(available / 1024, 2),
-        "used_mb": round(used / 1024, 2),
-    }
-
-
-def get_storage_info():
-    paths = [
-        os.path.expanduser("~"),
-        "/data/data/com.termux/files/home",
-        "/data/data/com.termux/files/usr",
-    ]
-
-    result = None
-
-    for path in paths:
-        try:
-            total, used, free = shutil.disk_usage(path)
-
-            result = {
-                "path": path,
-                "total_gb": round(total / (1024 ** 3), 2),
-                "used_gb": round(used / (1024 ** 3), 2),
-                "free_gb": round(free / (1024 ** 3), 2),
-            }
-
-            break
-
-        except (OSError, PermissionError):
-            continue
-
-    if result is None:
-        return {
-            "path": None,
-            "total_gb": None,
-            "used_gb": None,
-            "free_gb": None,
-        }
-
-    return result
-
-
-def get_android_version():
-    properties = [
-        "ro.build.version.release",
-        "ro.build.version.sdk",
-        "ro.product.model",
-        "ro.product.manufacturer",
-    ]
-
-    result = {}
-
-    for prop in properties:
-        try:
-            process = subprocess.run(
-                ["getprop", prop],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-
-            value = process.stdout.strip()
-
-            if value:
-                result[prop] = value
-
-        except (OSError, subprocess.SubprocessError):
-            result[prop] = None
-
-    return result
-
-
-def get_uptime():
-    # Cara utama: /proc/uptime
-    value = read_file("/proc/uptime")
-
-    if value:
-        try:
-            seconds = float(value.split()[0])
-
-            return {
-                "seconds": round(seconds, 2),
-                "days": int(seconds // 86400),
-                "hours": int((seconds % 86400) // 3600),
-                "minutes": int((seconds % 3600) // 60),
-            }
-
-        except (ValueError, IndexError):
-            pass
-
-    # Fallback: command uptime
-    try:
-        process = subprocess.run(
-            ["uptime"],
+        result = subprocess.run(
+            ["getprop", name],
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=3,
         )
 
-        output = process.stdout.strip()
+        if result.returncode == 0:
+            value = result.stdout.strip()
 
-        if output:
-            return {
-                "seconds": None,
-                "days": None,
-                "hours": None,
-                "minutes": None,
-                "raw": output,
-            }
+            if value:
+                return value
 
-    except (OSError, subprocess.SubprocessError):
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
         pass
 
     return None
 
 
-def get_device_status():
-    storage = get_storage_info()
-    ram = get_ram_info()
-    uptime = get_uptime()
-    android = get_android_version()
+def get_cpu_count():
+    try:
+        count = os.cpu_count()
+
+        if count is not None:
+            return count
+
+    except Exception:
+        pass
+
+    return None
+
+
+def get_ram_info():
+    """
+    Membaca /proc/meminfo.
+    Tidak membutuhkan psutil.
+    """
+
+    try:
+        values = {}
+
+        with open("/proc/meminfo", "r", encoding="utf-8") as file:
+            for line in file:
+                parts = line.split()
+
+                if len(parts) >= 2:
+                    key = parts[0].rstrip(":")
+                    value = parts[1]
+
+                    try:
+                        values[key] = int(value)
+                    except ValueError:
+                        continue
+
+        total_kb = values.get("MemTotal")
+        available_kb = values.get("MemAvailable")
+
+        if total_kb is None:
+            return {
+                "total_mb": None,
+                "used_mb": None,
+                "available_mb": None,
+            }
+
+        if available_kb is None:
+            available_kb = values.get("MemFree", 0)
+
+        used_kb = max(total_kb - available_kb, 0)
+
+        return {
+            "total_mb": round(total_kb / 1024, 2),
+            "used_mb": round(used_kb / 1024, 2),
+            "available_mb": round(available_kb / 1024, 2),
+        }
+
+    except (OSError, PermissionError):
+        return {
+            "total_mb": None,
+            "used_mb": None,
+            "available_mb": None,
+        }
+
+
+def get_uptime():
+    """
+    Membaca uptime dari /proc/uptime.
+    """
+
+    try:
+        with open("/proc/uptime", "r", encoding="utf-8") as file:
+            first = file.read().split()[0]
+
+        seconds = float(first)
+
+        total_seconds = int(seconds)
+
+        days = total_seconds // 86400
+        remaining = total_seconds % 86400
+
+        hours = remaining // 3600
+        remaining %= 3600
+
+        minutes = remaining // 60
+
+        return {
+            "seconds": total_seconds,
+            "days": days,
+            "hours": hours,
+            "minutes": minutes,
+            "raw": None,
+        }
+
+    except (OSError, PermissionError, ValueError, IndexError):
+        pass
+
+    # Fallback ke uptime command
+    try:
+        result = subprocess.run(
+            ["uptime"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+
+        raw = result.stdout.strip()
+
+        if raw:
+            return {
+                "seconds": None,
+                "days": None,
+                "hours": None,
+                "minutes": None,
+                "raw": raw,
+            }
+
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        pass
 
     return {
-        "system": platform.system(),
-        "platform": platform.platform(),
-        "machine": platform.machine(),
-        "release": platform.release(),
-        "python": platform.python_version(),
-        "cpu_count": os.cpu_count(),
+        "seconds": None,
+        "days": None,
+        "hours": None,
+        "minutes": None,
+        "raw": None,
+    }
+
+
+def get_kernel():
+    """
+    Mendapatkan kernel Linux Android sebenarnya.
+    """
+
+    try:
+        result = subprocess.run(
+            ["uname", "-r"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+
+        if result.returncode == 0:
+            value = result.stdout.strip()
+
+            if value:
+                return value
+
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        pass
+
+    try:
+        value = platform.uname().release
+
+        if value:
+            return value
+
+    except Exception:
+        pass
+
+    return None
+
+
+def get_hostname():
+    try:
+        hostname = socket.gethostname()
+
+        if hostname:
+            return hostname
+
+    except Exception:
+        pass
+
+    return "localhost"
+
+
+def get_device_status():
+    android_version = read_android_property(
+        "ro.build.version.release"
+    )
+
+    sdk_version = read_android_property(
+        "ro.build.version.sdk"
+    )
+
+    model = read_android_property(
+        "ro.product.model"
+    )
+
+    manufacturer = read_android_property(
+        "ro.product.manufacturer"
+    )
+
+    system = platform.system() or "Android"
+    machine = platform.machine()
+    python_version = platform.python_version()
+
+    kernel = get_kernel()
+    cpu_count = get_cpu_count()
+    ram = get_ram_info()
+    storage = get_storage_info()
+    uptime = get_uptime()
+
+    if android_version:
+        platform_name = (
+            f"Android-{android_version}-"
+            f"{machine}-{platform.architecture()[0]}"
+        )
+    else:
+        platform_name = platform.platform()
+
+    return {
+        "system": system,
+        "platform": platform_name,
+        "machine": machine,
+        "release": kernel,
+        "python": python_version,
+        "cpu_count": cpu_count,
+
         "ram": ram,
         "storage": storage,
         "uptime": uptime,
-        "android": android,
-        "hostname": platform.node(),
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+
+        "android": {
+            "ro.build.version.release": android_version,
+            "ro.build.version.sdk": sdk_version,
+            "ro.product.model": model,
+            "ro.product.manufacturer": manufacturer,
+        },
+
+        "hostname": get_hostname(),
+        "timestamp": datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        ),
     }
+
+
+if __name__ == "__main__":
+    import pprint
+
+    pprint.pprint(get_device_status())
