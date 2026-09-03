@@ -1,1 +1,6 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Runtime logs
 logs/*.log
